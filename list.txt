@@ -1,0 +1,134 @@
+<<< server01.js >>>
+목표 : ejs 페이지를 만들고  nodejs에서 불러온다.
+
+ejs 페이지 : 일종의 템플릿, html문서 중간 중간에 js 변수가 삽입 가능한 템플릿
+
+ejs와 정보를 합성해 클라이언트로 돌려줄때 render를 사용한다.
+ res.render('index.ejs', {name : 'nobody'})
+
+
+<<< server02.js >>>
+목표 : 첫화면, 로그인 화면, 등록 화면을 ejs 로 만들고 서버에서 불러온다.
+
+이때 각 화면을 부르는 메소드 get 이다. 
+
+추가되는 라우터
+app.get('/login', (req, res) => {
+  res.render('login.ejs')
+})
+
+app.get('/register', (req, res) => {
+  res.render('register.ejs')
+})
+
+<<< server03.js >>>
+목표 : 로그인화면과 등록화면에서 요청을 보낼때 받은 정보를 그대로 클라이언트에 돌려준다.
+
+이때 각 화면을 부르는 메소는 post 이다.
+
+이때 받은 정보를 파싱하기 위해 urlencoded 사용한다.
+app.use(express.urlencoded({ extended: false }))
+
+
+받은 정보를 클라이언트로 돌려줄때 제이슨 형태로 돌려준다. 
+  res.json (jD) 
+
+
+<<< server04.js >>>
+목표 : 평문인 비밀번호를 해쉬를 적용시켜 보안을 강화한다. 
+
+해쉬함수를 사용하기 위해서 bcrypt 가필요하다.
+const bcrypt = require('bcrypt')
+비밀번호에 해쉬함수를 적용시킬때 보안레벌을 결정하는데 10정도가 적당하다.
+
+<<< server05.js >>>
+목표 : async 와 await 이해하기 
+
+해쉬함수를 await 없이 사용하면 패스워드 해쉬값을 돌려주기도 전에 
+루틴이 진행되어버린다. 이것을 막기위해 함수자체를 async로 선언해주고
+bcrypt.hash(req.body.password, 10)의 결과를 기다리라는 의미인
+await를 기술 해줘야 된다. 
+ex>
+const hashedPassword =  await bcrypt.hash(req.body.password, 10)
+
+<< server06 >>
+목표 : 데이터 저장소로 배열을 사용하기, 배열 조작법
+
+데이터 저장소로 mysql 또는 mongoDB를 주로 사용하나 이것은 별도의 주제이고
+여기서는 간단하게 데이터 저장소로 배열을 사용한다.
+배열에 저장된 데이터는 영구히 저장되는 것이 아니라,
+매번 서버 시작시 초기화된다.
+
+선언 : const users = []
+배열에   데이터 삽입 : users.push ( json )
+배열에서 데이터 검색 : users.find
+
+삽입과 검색의 예
+
+데이터 삽입 
+    users.push({
+      id: dbIndex,
+      name: req.body.name,
+      email: req.body.email,
+      password: hashedPassword
+    })
+데이터 검색
+ const eUser = users.find(user => user.email === email)
+
+
+
+<< server07 >>
+ 목표 : 사용자 아이디 비밀번호 검증을 위해 패스포트 이용하기 
+
+ 1단계 : 패스포트를 서버에 삽입하고, 아이디 비밀번호 검증 방법을 기술한다. 
+ passport.use(new LocalStrategy({ usernameField: 'email' }, authenticateUser))
+
+ 2단계 : 패스포트 초기화를 통해서 1단계에서 기술된 검증방법을 불러들인다. 
+ app.use(passport.initialize())
+
+ 3단계 : 실제 로그인이 필요할때 검증을 실행 시킨다. 이때 결과값은 성공유무에
+ 따라서 어디로 분기할 것인지에 대한 분기 값이다. 
+ passport.authenticate('local', { successRedirect: '/', failureRedirect: '/register' } ) );
+
+<< server08 >>
+목표 : 패스포트를 이용한 아이디 검증시, 세션정보를 만들고 이후 모든 페이지에서
+세션정보를 읽는다. 
+
+1단계 : 세션정보를 만드는 법과 세션정보를 읽는 법에 대해 기술한다. 
+passport.serializeUser((user, done) -> 만드는 방법
+passport.deserializeUser((id, done) -> 검증하는 방법
+
+2단계 : 패스포트 초기화를 통해서 1단계에서 기술된 세션 정보를 불러들인다.
+
+3단계 : 실제로그인시 (passport.authenticate) 기술된 방식(passport.serializeUser)
+세션 정보를 만든다. 
+
+4단계 : 로그인 이후 모든 페이지 에서 기술된 세션 정보를 읽고 검증한다. 
+passport.deserializeUser
+
+<< server09 >>
+목표 : 패스포트의 세션 정보를 통해서 비정상적인 경로의 유입을 차단한다.
+      로그아웃을 통해서 만들어진 세션정보를 초기화 시킨다.  
+
+이미 로그인된 사용자가 로그인, 등록을 요청시  처음 페이지를 돌려보내고
+신규 사용자 요청은 로그인 또는 등록을 가능 하게 통과시켜준다.
+function checkNotAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return res.redirect('/')
+  }
+  next()
+}
+
+로그인 또는 등록 화면이 불러질때 정의된 함수를 통해 비정상적 유입을 차단한다.
+ex> app.post('/register', checkNotAuthenticated, async (req, res) ...
+
+
+
+
+
+
+
+
+
+
+
